@@ -2,6 +2,29 @@
 import java.util.Scanner;
 
 public class Main {
+
+    public static int ReadId(Scanner scanner) {
+
+        while(true) {
+
+            //Ask for id
+            System.out.println("Enter task id: ");
+            String raw_id = scanner.nextLine();
+
+            //Convert id to int
+            int id;
+            try {
+                id = Integer.parseInt(raw_id);
+                return id;
+            }
+
+            //If user typed text instead of number
+            catch (NumberFormatException e) {
+                System.out.println("Invalid input. Please enter a number.");
+            }
+        }
+    }
+
     public static void main(String[] args) {
 
         // "try-with-resources" block:
@@ -54,22 +77,92 @@ public class Main {
                 switch (choice){
 
                     //Add task
-                    case 1 -> {}
+                    case 1 -> {
+                        // Ask the user to type the task title, and read it from the user input
+                        System.out.print("Enter task title: ");
+                        String title = scanner.nextLine();
+
+                        //store in database
+                        repository.insertTask(title);
+
+                        // Show confirmation with generated ID
+                        System.out.println("Task created with id=" + id);
+
+                    }
 
                     //List tasks
-                    case 2 -> {}
+                    case 2 -> {
+                        repository.listTasks();
+                    }
 
                     //Mark done/ not done
-                    case 3 -> {}
+                    case 3 -> {
+                        //Read id
+                        int id = ReadId(scanner);
+
+                        //Done or not done flag
+                        System.out.println("Is the task done? true/false");
+                        String raw_done = scanner.nextLine();
+
+                        boolean done;
+                        // Validate user input
+                        if (raw_done.equalsIgnoreCase("true") || raw_is_done.equalsIgnoreCase("false")) {
+                            done = Boolean.parseBoolean(raw_is_done);
+                        }
+
+                        else {
+                            //if not a boolean
+                            System.out.println("Invalid input. Please enter true or false.");
+                            // go back to menu
+                            continue;
+                        }
+
+                        //Update the task status
+                        repository.markDone(id, done);
+
+                        if(done) {
+                            System.out.println("Task" + id + "is DONE");
+                        }
+
+                        else {
+                            System.out.println("Task" + id + "is NOT done");
+                        }
+                    }
 
                     //Rename task
-                    case 4 -> {}
+                    case 4 -> {
+                        //Read id
+                        int id = ReadId(scanner);
+
+                        // Ask the user to type the task title, and read it from the user input
+                        System.out.print("Enter new task title: ");
+                        String new_title = scanner.nextLine();
+
+                        //Update task title
+                        repository.renameTask(id, new_title);
+                        System.out.println("Task" + id + "renamed to" + new_title);
+
+                    }
 
                     //View task by id
-                    case 5 -> {}
+                    case 5 -> {
+                        //Read id
+                        int id = ReadId(scanner);
+
+                        // Print the task
+                        repository.printTaskById(id);
+
+                    }
 
                     //Quit
-                    case 6 -> {}
+                    case 6 -> {
+                        //Stops the loop
+                        System.out.println("So long, farewell, aufwiedersehn, goodbye");
+                        running = false;
+                    }
+
+                    // If user enters number outside menu range
+                    default -> { System.out.println("Invalid option. Please choose 1-6."); }
 
                 }
 
