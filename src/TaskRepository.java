@@ -128,7 +128,7 @@ public class TaskRepository implements AutoCloseable {
     }
 
     // Updates a task's completion status
-    public void markDone(int id, Boolean done) throws SQLException {
+    public boolean markDone(int id, Boolean done) throws SQLException {
 
         // SQL update query
         String sql = "UPDATE tasks SET is_done = ? WHERE id = ?;";
@@ -142,8 +142,11 @@ public class TaskRepository implements AutoCloseable {
             // Specify which task to update
             statement.setInt(2, id);
 
-            // Execute the update
-            statement.executeUpdate();
+            // Number of rows affected
+            int rowsUpdated = statement.executeUpdate();
+
+            // Return true if at least one row was updated
+            return rowsUpdated > 0;
         }
     }
 
@@ -216,7 +219,7 @@ public class TaskRepository implements AutoCloseable {
     }
 
     // Renames a task
-    public void renameTask(int id, String newTitle) throws SQLException {
+    public boolean renameTask(int id, String newTitle) throws SQLException {
 
         // SQL update statement
         String sql = "UPDATE tasks SET title = ? WHERE id = ?;";
@@ -230,8 +233,11 @@ public class TaskRepository implements AutoCloseable {
             // Set task id
             statement.setInt(2, id);
 
-            // Execute update
-            statement.executeUpdate();
+            // Number of rows affected
+            int rowsUpdated = statement.executeUpdate();
+
+            // Return true if at least one row was updated
+            return rowsUpdated > 0;
         }
     }
 

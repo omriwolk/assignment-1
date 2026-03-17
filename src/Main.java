@@ -134,12 +134,15 @@ public class Main {
                         }
 
                         //Update the task status
-                        repository.markDone(id, done);
 
-                        if(done) {
+                        boolean updated = repository.markDone(id, done);
+
+                        if (!updated) {
+                            System.out.println("No task found for id = " + id);
+                        }
+                        else if (done) {
                             System.out.println("Task" + id + "is DONE");
                         }
-
                         else {
                             System.out.println("Task" + id + "is NOT done");
                         }
@@ -155,8 +158,14 @@ public class Main {
                         String new_title = scanner.nextLine();
 
                         //Update task title
-                        repository.renameTask(id, new_title);
-                        System.out.println("Task" + id + "renamed to" + new_title);
+                        boolean updated = repository.renameTask(id, new_title);
+
+                        if (updated) {
+                            System.out.println("Task" + id + "renamed to" + new_title);
+                        }
+                        else {
+                            System.out.println("No task found for id = " + id);
+                        }
 
                     }
 
