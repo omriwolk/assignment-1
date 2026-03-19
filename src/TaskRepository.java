@@ -6,7 +6,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.OffsetDateTime;
-
+import java.util.ArrayList;
+import java.util.List;
 
 
 // Repository class responsible for all database operations
@@ -19,9 +20,20 @@ public class TaskRepository implements AutoCloseable {
     // Connection object used for all database operations
     private final Connection connection;
 
+
     // Constructor that opens a connection to the database
     public TaskRepository() throws SQLException {
         this.connection = DriverManager.getConnection(DB_URL);
+    }
+
+    //Map the SQL table rows into a Task object
+    private Task mapRow(ResultSet rs) throws SQLException {
+        return new Task(
+                rs.getInt("id"),
+                rs.getString("title"),
+                rs.getInt("is_done") ==1,
+                rs.getString("created_at")
+        );
     }
 
     // Creates the tasks table if it does not already exist
@@ -32,7 +44,7 @@ public class TaskRepository implements AutoCloseable {
             CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,  -- unique task id
                 title TEXT NOT NULL CHECK (trim(title) <> ''),                   -- task title
-                is_done INTEGER NOT NULL DEFAULT 0,    -- completion flag (0=false, 1=true)
+                is_done  INTEGER NOT NULL CHECK (is_done IN (0, 1)) DEFAULT 0,    -- completion flag (0=false, 1=true)
                 created_at TEXT NOT NULL               -- creation timestamp
             );
             """;
@@ -46,13 +58,15 @@ public class TaskRepository implements AutoCloseable {
     }
 
     // Inserts a new task into the database and returns the generated id
-    public int insertTask(String title) throws SQLException {
+    public Task insertTask(String title) throws SQLException {
 
         // Handle empty titles
         if (title == null || title.trim().isEmpty()) {
-            System.out.println("Title cannot be empty.");
-            return -1;
+            throw new IllegalArgumentException("Title cannot be empty.");
         }
+
+        //Get timestamp and convert to a string
+        String createdAt = OffsetDateTime.now().toString();
 
         // SQL query with placeholders (?) for values
         String sql = "INSERT INTO tasks(title, is_done, created_at) VALUES (?, ?, ?);";
@@ -69,13 +83,15 @@ public class TaskRepository implements AutoCloseable {
             statement.executeUpdate();
 
             // Retrieve generated keys (the auto-increment id)
-            try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
+            try (ResultSet keys = statement.getGeneratedKeys()) {
 
                 // If a key was returned
-                if (generatedKeys.next()) {
+                if (keys.next()) {
 
-                    // Return the new task id
-                    return generatedKeys.getInt(1);
+                    int id = keys.getInt(1);
+
+                    // Return a new task
+                    return new Task(id, title, false, createdAt);
                 }
             }
         }
@@ -85,14 +101,18 @@ public class TaskRepository implements AutoCloseable {
     }
 
     // Lists all tasks stored in the database
-    public void listTasks(Boolean done) throws SQLException {
+    public List<Task> listTasks(Boolean done) throws SQLException {
 
-        // SQL query selecting tasks ordered by newest first
+        //Create empty list
+        List<Task> tasks = new ArrayList<>();
+
+
+        // Define the SQL query
         String sql;
-
         if (done == null) {
             sql = "SELECT id, title, is_done, created_at FROM tasks ORDER BY id ASC;";
-        } else {
+        }
+        else {
             sql = "SELECT id, title, is_done, created_at FROM tasks WHERE is_done = ? ORDER BY id ASC;";
         }
 
@@ -111,24 +131,15 @@ public class TaskRepository implements AutoCloseable {
                 while (resultSet.next()) {
 
                     // Read values from the current row
-                    int id = resultSet.getInt("id");
-                    String title = resultSet.getString("title");
-
-                    // Convert integer (0/1) to Boolean
-                    Boolean is_done = resultSet.getInt("is_done") == 1;
-
-                    // Read creation timestamp
-                    String createdAt = resultSet.getString("created_at");
-
-                    // Print formatted output to the console
-                    System.out.printf("[%d] %s | done=%s | created_at=%s%n", id, title, is_done, createdAt);
+                    tasks.add(mapRow(resultSet));
                 }
             }
         }
+        return tasks;
     }
 
     // Updates a task's completion status
-    public boolean markDone(int id, Boolean done) throws SQLException {
+    public Task markDone(int id, Boolean done) throws SQLException {
 
         // SQL update query
         String sql = "UPDATE tasks SET is_done = ? WHERE id = ?;";
@@ -145,13 +156,18 @@ public class TaskRepository implements AutoCloseable {
             // Number of rows affected
             int rowsUpdated = statement.executeUpdate();
 
-            // Return true if at least one row was updated
-            return rowsUpdated > 0;
+            // Handle non existent ids
+            if (rowsUpdated == 0) {
+                throw new SQLException("No task found with id=" + id);
+            }
         }
+
+        // Return the updated Task
+        return getTaskById(id);
     }
 
     // Prints a specific task based on its id
-    public void printTaskById(int id) throws SQLException {
+    public Task getTaskById(int id) throws SQLException {
 
         // SQL query to find task by id
         String sql = "SELECT id, title, is_done, created_at FROM tasks WHERE id = ?;";
@@ -165,84 +181,85 @@ public class TaskRepository implements AutoCloseable {
             // Execute query
             try (ResultSet resultSet = statement.executeQuery()) {
 
-                // If a row was found
+                // If a row was found, return the task
                 if (resultSet.next()) {
 
-                    // Print task details
-                    System.out.printf("[%d] %s | done=%s | created_at=%s%n",
-                            resultSet.getInt("id"),
-                            resultSet.getString("title"),
-                            resultSet.getInt("is_done") == 1,
-                            resultSet.getString("created_at"));
-                } else {
+                    return mapRow(resultSet);
+                }
 
-                    // If no task with this id exists
-                    System.out.println("Task not found for id=" + id);
+                // If no task with this id exists
+                throw new SQLException("Task not found for id=" + id);
                 }
             }
         }
-    }
 
     // Searches tasks whose title contains the given keyword
-    public void searchTasks(String keyword) throws SQLException {
+    public List<Task> searchTasks(String keyword) throws SQLException {
 
-        // SQL query using LIKE for partial matching
+        //Create empty list
+        List<Task> tasks = new ArrayList<>();
+
+
+        // Define the SQL query
         String sql = """
-        SELECT id, title, is_done, created_at
-        FROM tasks
+        SELECT * FROM tasks
         WHERE title LIKE ?
-        ORDER BY id ASC;
+        ORDER BY id ASC
         """;
 
         // Prepare statement
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
 
-            // Add wildcards before and after keyword
+            // Add wildcards before and after keyword for partial matching
             statement.setString(1, "%" + keyword + "%");
 
-            // Execute query
+            // Prepare statement and execute query
             try (ResultSet resultSet = statement.executeQuery()) {
 
-                // Iterate through results
+                // Loop through each row returned by the query
                 while (resultSet.next()) {
 
-                    int id = resultSet.getInt("id");
-                    String title = resultSet.getString("title");
-                    Boolean isDone = resultSet.getInt("is_done") == 1;
-                    String createdAt = resultSet.getString("created_at");
-
-                    System.out.printf("[%d] %s | done=%s | created_at=%s%n", id, title, isDone, createdAt);
-
+                    // Read values from the current row
+                    tasks.add(mapRow(resultSet));
                 }
             }
         }
+        return tasks;
     }
 
     // Renames a task
-    public boolean renameTask(int id, String newTitle) throws SQLException {
+    public Task renameTask(int id, String newTitle) throws SQLException {
 
-        // SQL update statement
+    // SQL update query
         String sql = "UPDATE tasks SET title = ? WHERE id = ?;";
 
         // Prepare statement
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
 
-            // Set new title
+            //Set new title
             statement.setString(1, newTitle);
 
-            // Set task id
+            // Specify which task to update
             statement.setInt(2, id);
 
             // Number of rows affected
             int rowsUpdated = statement.executeUpdate();
 
-            // Return true if at least one row was updated
-            return rowsUpdated > 0;
+            // Handle non existent ids
+            if (rowsUpdated == 0) {
+                throw new SQLException("No task found with id=" + id);
+            }
         }
+
+        // Return the updated Task
+        return getTaskById(id);
     }
 
     // Deletes a task from the database
-    public void deleteTask(int id) throws SQLException {
+    public Task popTask(int id) throws SQLException {
+
+        //fetch the task to delete and return
+        Task taskToDelete = getTaskById(id);
 
         // SQL delete command
         String sql = "DELETE FROM tasks WHERE id = ?;";
@@ -256,6 +273,8 @@ public class TaskRepository implements AutoCloseable {
             // Execute deletion
             stmt.executeUpdate();
         }
+
+        return taskToDelete;
     }
 
     // Automatically called when the repository is closed
